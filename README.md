@@ -1,1 +1,1 @@
-# image-recognition-chatbot
+In this project, I've developed an innovative conversational image recognition chatbot designed to interact with users and interpret images based on natural language input. The chatbot combines computer vision and NLP techniques, enabling it to understand and process user requests in a conversational manner.
