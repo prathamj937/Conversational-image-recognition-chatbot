@@ -8,7 +8,7 @@ import ollama  # ✅ New import for Ollama
 import torch
 
 app = Flask(__name__)
-app.secret_key = "AIzaSyC1oNGdNdodbWuY6eKxVrzOf7ai-UM3vfw"  # Replace with something strong
+app.secret_key = "api key"  # Replace with something strong
 
 # -----------------------------
 # Image Captioning Pipeline
