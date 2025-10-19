@@ -1,0 +1,6 @@
+transformers
+onnxruntime
+pillow
+torch
+groq
+flask
