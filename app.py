@@ -1,21 +1,17 @@
 from flask import Flask, request, jsonify, session, render_template
-from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
+from transformers import pipeline
 import onnxruntime as ort
 from PIL import Image
 import numpy as np
 import os
-import ollama  # ✅ New import for Ollama
 import torch
+from groq import Groq  
 
-app = Flask(__name__)
-app.secret_key = "api key"  # Replace with something strong
+app = Flask(__name__)   
+app.secret_key = "AIzaSyC1oNGdNdodbWuY6eKxVrzOf7ai-UM3vfw"  
 
-# -----------------------------
-# Image Captioning Pipeline
 git_pipe = pipeline("image-to-text", model="microsoft/git-large-textcaps")
 
-# -----------------------------
-# ONNX Model Setup
 MODEL_DIR = "models"
 model_files = {
     "flower": os.path.join(MODEL_DIR, "flower.onnx"),
@@ -23,6 +19,7 @@ model_files = {
     "dog": os.path.join(MODEL_DIR, "dog.onnx"),
     "landmark": os.path.join(MODEL_DIR, "landmark.onnx")
 }
+
 for name, path in model_files.items():
     if not os.path.exists(path):
         raise FileNotFoundError(f"Missing model file: {path}")
@@ -32,13 +29,23 @@ bird_session = ort.InferenceSession(model_files["bird"])
 dog_session = ort.InferenceSession(model_files["dog"])
 landmark_session = ort.InferenceSession(model_files["landmark"])
 
-dog_list = ["Bulldog", "Chihuahua", "Dobermann", "German Shepherd", "Golden Retriever", "Husky", "Labrador Retriever", "Pomeranian", "Pug", "Rottweiler", "Street dog"]
-flower_list = ["Jasmine", "Lavender", "Lily", "Lotus", "Orchid", "Rose", "Sunflower", "Tulip", "Daisy", "Dandelion"]
-bird_list = ["Crow", "Eagle", "Flamingo", "Hummingbird", "Parrot", "Peacock", "Pigeon", "Sparrow", "Swan"]
-landmark_list = ["The Agra Fort", "Ajanta Caves", "Alai Darwaza", "Amarnath Temple", "The Amber Fort", "Basilica of Bom Jesus", "Brihadisvara Temple", "Charminar", "Chhatrapati Shivaji Terminus", "Dal Lake", "The Elephanta Caves", "Ellora Caves", "Fatehpur Sikri", "Gateway of India", "Golden Temple", "Hawa Mahal", "Humayun's Tomb", "India Gate", "Jagannath Temple", "Jama Masjid", "Jantar Mantar", "Kedarnath Temple", "Konark Sun Temple", "Meenakshi Temple", "Nalanda Mahavihara", "Qutb Minar", "The Red Fort", "Taj Mahal", "Victoria Memorial"]
+dog_list = ["Bulldog", "Chihuahua", "Dobermann", "German Shepherd", "Golden Retriever", 
+             "Husky", "Labrador Retriever", "Pomeranian", "Pug", "Rottweiler", "Street dog"]
 
-# -----------------------------
-# Preprocessing for ONNX
+flower_list = ["Jasmine", "Lavender", "Lily", "Lotus", "Orchid", "Rose", "Sunflower", 
+                "Tulip", "Daisy", "Dandelion"]
+
+bird_list = ["Crow", "Eagle", "Flamingo", "Hummingbird", "Parrot", "Peacock", 
+              "Pigeon", "Sparrow", "Swan"]
+
+landmark_list = ["The Agra Fort", "Ajanta Caves", "Alai Darwaza", "Amarnath Temple", 
+                  "The Amber Fort", "Basilica of Bom Jesus", "Brihadisvara Temple", 
+                  "Charminar", "Chhatrapati Shivaji Terminus", "Dal Lake", "The Elephanta Caves", 
+                  "Ellora Caves", "Fatehpur Sikri", "Gateway of India", "Golden Temple", 
+                  "Hawa Mahal", "Humayun's Tomb", "India Gate", "Jagannath Temple", "Jama Masjid", 
+                  "Jantar Mantar", "Kedarnath Temple", "Konark Sun Temple", "Meenakshi Temple", 
+                  "Nalanda Mahavihara", "Qutb Minar", "The Red Fort", "Taj Mahal", "Victoria Memorial"]
+
 def preprocess_image(img):
     img = img.resize((224, 224))
     img_array = np.array(img) / 255.0
@@ -55,8 +62,6 @@ def identify_flower(img): return predict(flower_session, preprocess_image(img), 
 def identify_bird(img): return predict(bird_session, preprocess_image(img), bird_list)
 def identify_landmark(img): return predict(landmark_session, preprocess_image(img), landmark_list)
 
-# -----------------------------
-# Caption + Classification
 def generate_final_caption(img):
     caption_data = git_pipe(img)
     caption = caption_data[0]["generated_text"]
@@ -75,22 +80,30 @@ def generate_final_caption(img):
     final_caption = caption + "\n" + details
     return final_caption
 
-# -----------------------------
-# 🔁 Ollama Chatbot
-import ollama
+GROQ_API_KEY = "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" 
+groq_client = Groq(api_key=GROQ_API_KEY)
 
-def get_ollama_response(query, context=""):
+def get_groq_response(query, context=""):
+    """
+    Sends query + optional image context to Groq LLM and returns response.
+    """
     messages = []
     if context:
         messages.append({"role": "system", "content": f"Image context: {context}"})
     messages.append({"role": "user", "content": query})
 
-    response = ollama.chat(model="llama3", messages=messages)
-    return response['message']['content']
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=512
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print("Groq API Error:", e)
+        return "Sorry, I faced an issue while generating a response."
 
-
-# -----------------------------
-# Routes
 
 @app.route("/")
 def index():
@@ -118,14 +131,12 @@ def chatbot():
     image_context = session.get("image_context", "")
 
     try:
-        response = get_ollama_response(query, context=image_context)
+        response = get_groq_response(query, context=image_context)
         return jsonify({"response": response})
     except Exception as e:
         import traceback
-        traceback.print_exc()  # 🔥 This prints full traceback to terminal
+        traceback.print_exc()
         return jsonify({"error": "Sorry, I encountered an error. Please try again."}), 500
 
-
-# -----------------------------
 if __name__ == "__main__":
     app.run(debug=True)
